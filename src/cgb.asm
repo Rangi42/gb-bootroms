@@ -64,7 +64,7 @@ MACRO rgb
 ENDM
 
 
-SECTION "First section", ROM0[$000]
+SECTION "Boot ROM 1", ROM0[$0000]
 
 EntryPoint:
     ld sp, hStackBottom
@@ -149,7 +149,7 @@ LogoTilemapChecksums:
 
 Setup:
     ldh [rSVBK], a
-    ld a, $FC ; Colors: 3 3 3 0
+    ld a, %11_11_11_00
     ldh [rBGP], a
     call SetupSound
     call ClearVRAM
@@ -166,7 +166,8 @@ Setup:
 
     ld de, HeaderLogo
     ld hl, vLogoTiles
-    ld c, h ; ld c, $80 = LOW(hLogoBuffer)
+    ASSERT HIGH(vLogoTiles) == LOW(hLogoBuffer)
+    ld c, h ; ld c, LOW(hLogoBuffer)
 .processLogo
     ld a, [de]
     ldh [c], a
@@ -247,7 +248,7 @@ ENDC
     ldh [rBANK], a
 
 
-SECTION "Second section", ROM0[$200]
+SECTION "Boot ROM 2", ROM0[$0200]
 
 ClearVRAM:
     ld hl, _VRAM
@@ -363,11 +364,14 @@ CommitBGPalettes:
 
 
 SetupSound:
-    ld a, $80
-    ldh [rNR52], a ; Write AUDENA_ON
-    ldh [rNR11], a ; Write AUDLEN_DUTY_50
-    ld a, $F3
-    ldh [rNR12], a ; Write 15 << 4 | AUDENV_DOWN | 3
+    ; Enable APU
+    ld a, AUDENA_ON
+    ldh [rNR52], a
+    ; Set CH1 duty cycle to 50%
+    assert AUDENA_ON == AUDLEN_DUTY_50
+    ldh [rNR11], a
+    ld a, (15 << 4) | AUDENV_DOWN | 3 ; Initial volume 15, decreasing sweep 3
+    ldh [rNR12], a
     ; Note that only channel 1 will be used!
     ldh [rNR51], a ; Route all channels to left speaker, channels 1 and 2 to right
     ; Set both speakers to max volume, and ignore VIN
@@ -1387,7 +1391,7 @@ JoypadCombosTripletIDsAndFlags:
 
 
 
-SECTION "Video RAM", VRAM[$8000],BANK[0]
+SECTION "Video RAM", VRAM[_VRAM], BANK[0]
 
 vBlankTile:
     ds $10
@@ -1396,7 +1400,7 @@ vLogoTiles:
 vRTile:
     ds $10
 
-SECTION "Video RAM bank 1", VRAM[$8000],BANK[1]
+SECTION "Video RAM bank 1", VRAM[_VRAM], BANK[1]
 vTiles:
 
     ds $80
@@ -1413,17 +1417,17 @@ vNintendoLogoTilesEnd:
 
 MACRO vram_block
     ; Y rows + X columns
-    SECTION "\1 tilemap", VRAM[$9800 + (\3) * SCRN_VX_B + (\2)],BANK[0]
+    SECTION "\1 tilemap", VRAM[_SCRN0 + SCRN_VX_B * (\3) + (\2)], BANK[0]
     \1Map:
-    SECTION "\1 attrmap", VRAM[$9800 + (\3) * SCRN_VX_B + (\2)],BANK[1]
+    SECTION "\1 attrmap", VRAM[_SCRN0 + SCRN_VX_B * (\3) + (\2)], BANK[1]
     \1Attrs:
 ENDM
 
 ; Actual definition...
 
-SECTION "Tilemap", VRAM[_SCRN0],BANK[0]
+SECTION "Tilemap", VRAM[_SCRN0], BANK[0]
 vTileMap:
-SECTION "Attrmap", VRAM[_SCRN0],BANK[1]
+SECTION "Attrmap", VRAM[_SCRN0], BANK[1]
 vAttrMap:
 
     vram_block vGameBoyLogo, 2, 6, GB_LOGO_WIDTH, GB_LOGO_HEIGHT
@@ -1432,7 +1436,7 @@ vAttrMap:
     vram_block vBigNintendoLogo, 4, 8, OLD_LOGO_WIDTH, OLD_LOGO_HEIGHT
 
 
-SECTION "Work RAM", WRAMX[$D000],BANK[2]
+SECTION "Work RAM", WRAMX[_RAMBANK], BANK[2]
 wWorkRAM:
 
 wTitleChecksum:
@@ -1451,7 +1455,6 @@ wPressedButtons: ; This is never read, only written to
 wPaletteOverrideIndex:
     ds 1
 
-    ; TODO: some bytes around WhichPalTriplet and D00B are used in specific circumstances, investigate and label them
 wWhichPalTripletCopy:
     ds 1
 wOldWhichPalTriplet:
@@ -1486,9 +1489,9 @@ wBGPalBuffer:
 ; The 3 palette offsets are written here for all triplets, modified by the "shuffling flags"
 ; For each offset triplet written here, the order is as follows: OBP0, OBP1, BGP
 wPalOfsBuffer:
-    ds 90
+    ds 3 * 30
 .end
-    ds 6
+    ds 3 * 2
 .realEnd
 
     ds $A0
@@ -1497,10 +1500,9 @@ wPalBuffer:
     ds 96 * 8
 
 
-SECTION "High RAM", HRAM[$FF80]
+SECTION "High RAM", HRAM[_HRAM]
 
 hLogoBuffer: ; Relied on being at $FF80
-    ; ds ?
     ds $7E
 
 hStackBottom:

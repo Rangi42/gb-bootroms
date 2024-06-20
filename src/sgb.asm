@@ -10,7 +10,7 @@ EntryPoint:
     ldh [rP1], a
 
     xor a
-    ld hl, $9FFF
+    ld hl, _VRAM + SIZEOF(VRAM) - 1
 .clearVRAM
     ld [hld], a
     bit 7, h
@@ -20,13 +20,13 @@ EntryPoint:
     ld c, LOW(rNR11) ; CH1 length
     ; Enable APU
     ; This sets (roughly) all audio registers to 0
-    ld a, $80
+    ld a, AUDENA_ON
     ld [hld], a
     ; hl = rNR51
     ; Set CH1 duty cycle to 25%
     ldh [c], a
-    inc c ; ld c, LOW(rNR11) ; CH1 envelope
-    ld a, $F3 ; Initial volume 15, 3 decreasing sweep
+    inc c ; ld c, LOW(rNR12) ; CH1 envelope
+    ld a, (15 << 4) | AUDENV_DOWN | 3 ; Initial volume 15, decreasing sweep 3
     ldh [c], a
     ; Route all channels to left speaker, CH2 and CH1 to right speaker
     ld [hld], a
@@ -35,7 +35,7 @@ EntryPoint:
     ld a, $77
     ld [hl], a
 
-    ld a, $FC
+    ld a, %11_11_11_00
     ldh [rBGP], a
 
 
@@ -143,6 +143,7 @@ SendData:
     cp LOW(BufferEnd)
     jr nz, .sendPacket
 
+    ; Set frequency to $7C1
     ld c, LOW(rNR13)
     ld a, $C1
     ldh [c], a

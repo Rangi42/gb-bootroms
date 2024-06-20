@@ -1,6 +1,11 @@
 INCLUDE "hardware.inc/hardware.inc"
 INCLUDE "header.inc"
 
+; Internal/external rom bank register
+; XXXXXXXr
+; 0: monitor ROM, 1: cassette ROM
+DEF rBANK equ $FF50
+
 
 SECTION "Boot ROM", ROM0[$000]
 
@@ -8,7 +13,7 @@ EntryPoint:
     ld sp, hStackBottom
 
     xor a
-    ld hl, $9FFF
+    ld hl, _VRAM + SIZEOF(VRAM) - 1
 .clearVRAM
     ld [hld], a
     bit 7, h
@@ -18,13 +23,13 @@ EntryPoint:
     ld c, LOW(rNR11) ; CH1 length
     ; Enable APU
     ; This sets (roughly) all audio registers to 0
-    ld a, $80
+    ld a, AUDENA_ON
     ld [hld], a
     ; hl = rNR51
     ; Set CH1 duty cycle to 25%
     ldh [c], a
-    inc c ; ld c, LOW(rNR11) ; CH1 envelope
-    ld a, $F3 ; Initial volume 15, 3 decreasing sweep
+    inc c ; ld c, LOW(rNR12) ; CH1 envelope
+    ld a, (15 << 4) | AUDENV_DOWN | 3 ; Initial volume 15, decreasing sweep 3
     ldh [c], a
     ; Route all channels to left speaker, CH2 and CH1 to right speaker
     ld [hld], a
@@ -33,7 +38,7 @@ EntryPoint:
     ld a, $77
     ld [hl], a
 
-    ld a, $FC
+    ld a, %11_11_11_00
     ldh [rBGP], a
 
 IF DEF(dmg0)
@@ -116,7 +121,7 @@ ENDC
 ScrollLogo:
     ; a = 0
     ld h, a ; ld h, 0
-    ld a, $64
+    ld a, 100
     ld d, a
     ldh [rSCY], a
     ld a, LCDCF_ON | LCDCF_BLK01 | LCDCF_BGON
@@ -158,7 +163,7 @@ ENDC
     ldh [c], a
     inc c ; ld c, LOW(rNR14) ; CH1 frequency high byte
     ; Set frequency to $7XX and restart channel
-    ld a, $87
+    ld a, AUDHIGH_RESTART | 7
     ldh [c], a
 .dontPlaySound
     ldh a, [rSCY]
@@ -173,7 +178,7 @@ IF DEF(dmg0)
 ELSE
     jr nz, CheckLogo
 ENDC
-    ld d, $20
+    ld d, 32
     jr .loop
 
 
@@ -298,9 +303,9 @@ CheckLogo:
     jr nz, .checksumFailure
 
     IF DEF(mgb)
-    ld a, $FF
+    	ld a, BOOTUP_A_MGB
     ELSE
-    ld a, 1
+    	ld a, BOOTUP_A_DMG
     ENDC
 
 ELSE
@@ -308,7 +313,7 @@ ELSE
 Done:
     inc a
 ENDC
-    ldh [$FF50], a
+    ldh [rBANK], a
     assert @ == $100 ; Execution now falls through to the cartridge's header
 
 
